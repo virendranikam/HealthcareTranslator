@@ -1,0 +1,73 @@
+﻿@page "/translator"
+@using System.Text.Json
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<h3>Healthcare Translator</h3>
+
+<select @bind="sourceLanguage">
+    <option>English</option>
+    <option>Marathi</option>
+    <option>Hindi</option>
+</select>
+
+<select @bind="targetLanguage">
+    <option>Marathi</option>
+    <option>English</option>
+    <option>Hindi</option>
+</select>
+
+<button @onclick="StartListening">🎙️ Speak</button>
+
+<p><strong>Original:</strong> @originalText</p>
+<p><strong>Translated:</strong> @translatedText</p>
+
+<button @onclick="PlayTranslation">🔊 Speak Translation</button>
+
+@code {
+    string originalText = "";
+    string translatedText = "";
+    string sourceLanguage = "English";
+    string targetLanguage = "Marathi";
+
+    async Task StartListening()
+    {
+        await JS.InvokeVoidAsync("startSpeechRecognition", DotNetObjectReference.Create(this));
+    }
+
+    [JSInvokable]
+    public async Task ReceiveTranscript(string transcript)
+    {
+        originalText = transcript;
+        var response = await Http.PostAsJsonAsync("api/Translate", new
+        {
+            Text = transcript,
+            SourceLanguage = sourceLanguage,
+            TargetLanguage = targetLanguage
+        });
+
+        if (response.IsSuccessStatusCode)
+        {
+            var raw = await response.Content.ReadAsStringAsync();
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                var result = JsonSerializer.Deserialize<JsonElement>(raw);
+                translatedText = result.GetProperty("translatedText").GetString();
+            }
+            else
+            {
+                translatedText = "No translation received.";
+            }
+        }
+        else
+        {
+            translatedText = "Translation failed.";
+        }
+
+    }
+
+    async Task PlayTranslation()
+    {
+        await JS.InvokeVoidAsync("speakText", translatedText, targetLanguage);
+    }
+}
